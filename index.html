@@ -377,7 +377,7 @@
     var backMs = backFrames * FPS_MS;
     var downMs = backMs / m.ratio;
     var swingMs = backMs + downMs;
-    var pauseMs = Math.max(1500, 1.5 * swingMs);
+    var pauseMs = 5000; // fixed rest between swings to reset and re-address
     return {
       mode: m,
       backFrames: backFrames,
@@ -778,8 +778,6 @@
   // Map cycle time to position + phase. The downswing accelerates into impact
   // and the ball whips through the center, mirroring a real swing's 3:1 feel.
   function swingState(inCycle, t) {
-    var followMs = Math.min(t.downMs * 2.2, (t.fullCycleMs - t.swingMs) * 0.5);
-    var resetMs = t.fullCycleMs - t.swingMs - followMs;
     var u;
     if (inCycle < t.backMs) {
       u = inCycle / t.backMs;
@@ -787,12 +785,20 @@
     } else if (inCycle < t.swingMs) {
       u = (inCycle - t.backMs) / t.downMs;
       return { pos: 1 - u * u, phase: "down" };                 // right -> center (impact)
-    } else if (inCycle < t.swingMs + followMs) {
-      u = (inCycle - t.swingMs) / followMs;
-      return { pos: -(1 - (1 - u) * (1 - u)), phase: "through" }; // center -> left
     }
-    u = (inCycle - t.swingMs - followMs) / resetMs;
-    return { pos: -1 + easeInOutSine(u), phase: "reset" };       // left -> center
+    // Rest: follow through to the left, glide back to center, then hold ready
+    // for the remainder of the pause.
+    var p = inCycle - t.swingMs;
+    var followMs = Math.min(t.downMs * 2.2, t.pauseMs * 0.35);
+    var returnMs = Math.min(t.downMs * 3, t.pauseMs * 0.35);
+    if (p < followMs) {
+      u = p / followMs;
+      return { pos: -(1 - (1 - u) * (1 - u)), phase: "through" }; // center -> left
+    } else if (p < followMs + returnMs) {
+      u = (p - followMs) / returnMs;
+      return { pos: -1 + easeInOutSine(u), phase: "reset" };      // left -> center
+    }
+    return { pos: 0, phase: "ready" };                           // hold at address
   }
 
   function phaseColor(phase) {
