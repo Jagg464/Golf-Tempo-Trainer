@@ -289,9 +289,8 @@
   <audio id="loopPlayer" loop playsinline preload="auto"></audio>
 
   <div class="footer">
-    3 swings (practice, practice, hit) with 3s gaps. 15s break to grab a ball —
-    a soft chord at 10s, then a 3-pulse go-signal at 12s says start your routine.
-    Tour pros swing 3:1 back-to-down — 24/8 frames @30fps.
+    Sets of 3 swings (practice, practice, hit) with 3s gaps, then a 15s break
+    to grab a ball. Tour pros swing 3:1 back-to-down — 24/8 frames @30fps.
     Sound keeps playing when the screen locks.
   </div>
 </div>
@@ -306,9 +305,6 @@
   var SWINGS_PER_SET = 3;
   var SHORT_PAUSE_MS = 3000;
   var LONG_PAUSE_MS = 15000;
-  // Within the long break: at 10s a soft attention chord, at 12s a rising 3-pulse go-signal
-  var LONG_PAUSE_HEADS_UP_MS = 10000;
-  var LONG_PAUSE_GO_MS = 12000;
 
   var MODES = [
     {
@@ -508,21 +504,6 @@
     tone(ctx, when, 180, 0.12, 0.6);
   }
 
-  // Structural prep sounds — same regardless of sound style so users always
-  // recognise them. Both are clearly unlike the swing cues.
-  function prepHeadsUp(ctx, when) {
-    // Soft two-note chord: low, mellow, "pay attention"
-    tone(ctx, when, 330, 0.28, 0.20, "sine");
-    tone(ctx, when, 440, 0.28, 0.18, "sine");
-  }
-
-  function prepGo(ctx, when) {
-    // Three ascending pulses — "start your routine"
-    tone(ctx, when,        550, 0.07, 0.42, "sine");
-    tone(ctx, when + 0.15, 660, 0.07, 0.47, "sine");
-    tone(ctx, when + 0.30, 880, 0.09, 0.56, "sine");
-  }
-
   var SOUND_STYLES = {
     beeps: {
       takeaway: function(ctx, when) { tone(ctx, when, 1100, 0.08, 0.5); },
@@ -557,8 +538,6 @@
     var Ctor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     var ctx = new Ctor(1, setSamples * sets, sr);
     var style = SOUND_STYLES[sound];
-    // Long pause starts after the last swing's swingMs have elapsed within a set
-    var longPauseOffsetMs = timing.swingsPerSet * timing.swingMs + (timing.swingsPerSet - 1) * timing.shortPauseMs;
     for (var s = 0; s < sets; s++) {
       var setBase = (s * setSamples) / sr;
       for (var k = 0; k < timing.swingsPerSet; k++) {
@@ -567,10 +546,6 @@
           style[cue.label](ctx, swingStart + (cue.unit * timing.d) / 1000);
         });
       }
-      // Prep sounds in the long break: attention chord then go-signal
-      var longPauseStart = setBase + longPauseOffsetMs / 1000;
-      prepHeadsUp(ctx, longPauseStart + LONG_PAUSE_HEADS_UP_MS / 1000);
-      prepGo(ctx,      longPauseStart + LONG_PAUSE_GO_MS      / 1000);
     }
     return new Promise(function(resolve, reject) {
       ctx.oncomplete = function(e) { resolve(e.renderedBuffer); };
