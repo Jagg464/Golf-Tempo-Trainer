@@ -29,25 +29,25 @@
     padding: max(env(safe-area-inset-top, 16px), 16px) 16px max(env(safe-area-inset-bottom, 16px), 16px);
   }
   h1 {
-    font-size: 26px;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: 2px;
     color: #c8dca0;
     text-transform: uppercase;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
   }
   .subtitle {
-    font-size: 12px;
+    font-size: 9px;
     color: #7a9a5a;
     letter-spacing: 3px;
     text-transform: uppercase;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
   }
   .beats {
     display: flex;
     gap: 12px;
-    margin-bottom: 12px;
-    min-height: 68px;
+    margin-bottom: 8px;
+    min-height: 62px;
     align-items: flex-start;
   }
   .beat-wrap { text-align: center; }
@@ -102,7 +102,7 @@
   .timing {
     display: flex;
     gap: 16px;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
     text-align: center;
   }
   .timing-item label {
@@ -118,7 +118,7 @@
   .control-group {
     width: 100%;
     max-width: 340px;
-    margin-bottom: 12px;
+    margin-bottom: 9px;
   }
   .control-label {
     font-size: 11px;
@@ -289,8 +289,8 @@
   <audio id="loopPlayer" loop playsinline preload="auto"></audio>
 
   <div class="footer">
-    Tour pros swing at 3:1 back-to-down — typically 24/8 frames @30fps
-    (&approx;0.8s back, 0.27s down). Around the greens they use 2:1.
+    Sets of 3 swings (practice, practice, hit) with a short gap, then a long
+    break to grab a ball. Tour pros swing 3:1 back-to-down — 24/8 frames @30fps.
     Sound keeps playing when the screen locks.
   </div>
 </div>
@@ -298,6 +298,13 @@
 <script>
 (function() {
   var FPS_MS = 1000 / 30; // Tour Tempo timings are measured in 30fps video frames
+
+  // Practice structure: a set is several swings close together (practice,
+  // practice, hit) with a short pause between them, then a long break to grab
+  // another ball and reset before the next set.
+  var SWINGS_PER_SET = 3;
+  var SHORT_PAUSE_MS = 2000;
+  var LONG_PAUSE_MS = 12000;
 
   var MODES = [
     {
@@ -377,7 +384,8 @@
     var backMs = backFrames * FPS_MS;
     var downMs = backMs / m.ratio;
     var swingMs = backMs + downMs;
-    var pauseMs = 5000; // fixed rest between swings to reset and re-address
+    var setCycleMs = SWINGS_PER_SET * swingMs +
+                     (SWINGS_PER_SET - 1) * SHORT_PAUSE_MS + LONG_PAUSE_MS;
     return {
       mode: m,
       backFrames: backFrames,
@@ -385,8 +393,10 @@
       downMs: downMs,
       d: downMs,
       swingMs: swingMs,
-      pauseMs: pauseMs,
-      fullCycleMs: swingMs + pauseMs
+      swingsPerSet: SWINGS_PER_SET,
+      shortPauseMs: SHORT_PAUSE_MS,
+      longPauseMs: LONG_PAUSE_MS,
+      setCycleMs: setCycleMs
     };
   }
 
@@ -520,25 +530,29 @@
   function renderCycleBuffer() {
     var timing = getTiming();
     var sr = 44100;
-    var cycleSamples = Math.round(sr * timing.fullCycleMs / 1000);
-    // ~15-30s of audio per loop so wrap seams are rare and Safari treats it
-    // as a real media track
-    var cycles = Math.max(2, Math.ceil(15000 / timing.fullCycleMs));
+    var setSamples = Math.round(sr * timing.setCycleMs / 1000);
+    // Render at least 15s so wrap seams are rare and Safari treats it as a
+    // real media track (a single set is usually already longer than that).
+    var sets = Math.max(1, Math.ceil(15000 / timing.setCycleMs));
+    var seg = timing.swingMs + timing.shortPauseMs;
     var Ctor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    var ctx = new Ctor(1, cycleSamples * cycles, sr);
+    var ctx = new Ctor(1, setSamples * sets, sr);
     var style = SOUND_STYLES[sound];
-    for (var c = 0; c < cycles; c++) {
-      var base = (c * cycleSamples) / sr;
-      timing.mode.cues.forEach(function(cue) {
-        style[cue.label](ctx, base + (cue.unit * timing.d) / 1000);
-      });
+    for (var s = 0; s < sets; s++) {
+      var setBase = (s * setSamples) / sr;
+      for (var k = 0; k < timing.swingsPerSet; k++) {
+        var swingStart = setBase + (k * seg) / 1000;
+        timing.mode.cues.forEach(function(cue) {
+          style[cue.label](ctx, swingStart + (cue.unit * timing.d) / 1000);
+        });
+      }
     }
     return new Promise(function(resolve, reject) {
       ctx.oncomplete = function(e) { resolve(e.renderedBuffer); };
       var p = ctx.startRendering();
       if (p && p.then) p.then(resolve, reject);
     }).then(function(buffer) {
-      return { buffer: buffer, timing: timing, cycles: cycles };
+      return { buffer: buffer, timing: timing, sets: sets };
     });
   }
 
@@ -775,30 +789,46 @@
 
   function easeInOutSine(x) { return 0.5 - 0.5 * Math.cos(Math.PI * x); }
 
-  // Map cycle time to position + phase. The downswing accelerates into impact
-  // and the ball whips through the center, mirroring a real swing's 3:1 feel.
-  function swingState(inCycle, t) {
-    var u;
-    if (inCycle < t.backMs) {
-      u = inCycle / t.backMs;
-      return { pos: easeInOutSine(u), phase: "back" };          // center -> right
-    } else if (inCycle < t.swingMs) {
-      u = (inCycle - t.backMs) / t.downMs;
-      return { pos: 1 - u * u, phase: "down" };                 // right -> center (impact)
+  // One swing's motion from the time elapsed within that swing. The downswing
+  // accelerates into impact so the ball whips through the center (3:1 feel).
+  function swingMotion(local, t) {
+    if (local < t.backMs) {
+      return { pos: easeInOutSine(local / t.backMs), phase: "back" }; // center -> right
     }
-    // Rest: follow through to the left, glide back to center, then hold ready
-    // for the remainder of the pause.
-    var p = inCycle - t.swingMs;
-    var followMs = Math.min(t.downMs * 2.2, t.pauseMs * 0.35);
-    var returnMs = Math.min(t.downMs * 3, t.pauseMs * 0.35);
+    var u = (local - t.backMs) / t.downMs;
+    return { pos: 1 - u * u, phase: "down" };                        // right -> center
+  }
+
+  // Rest motion: follow through to the left, glide back to center, then hold
+  // ready for the remainder of the pause.
+  function restMotion(p, pause, t) {
+    var followMs = Math.min(t.downMs * 2.2, pause * 0.35);
+    var returnMs = Math.min(t.downMs * 3, pause * 0.35);
     if (p < followMs) {
-      u = p / followMs;
-      return { pos: -(1 - (1 - u) * (1 - u)), phase: "through" }; // center -> left
+      var u = p / followMs;
+      return { pos: -(1 - (1 - u) * (1 - u)), phase: "through" };    // center -> left
     } else if (p < followMs + returnMs) {
-      u = (p - followMs) / returnMs;
-      return { pos: -1 + easeInOutSine(u), phase: "reset" };      // left -> center
+      var u2 = (p - followMs) / returnMs;
+      return { pos: -1 + easeInOutSine(u2), phase: "reset" };        // left -> center
     }
-    return { pos: 0, phase: "ready" };                           // hold at address
+    return { pos: 0, phase: "ready" };                               // hold at address
+  }
+
+  // Locate where we are within a set: which swing, and whether mid-swing or
+  // in the pause that follows it.
+  function setState(inSet, t) {
+    var seg = t.swingMs + t.shortPauseMs;
+    for (var k = 0; k < t.swingsPerSet; k++) {
+      var start = k * seg;
+      if (inSet < start + t.swingMs) {
+        return { swing: k, inSwing: true, local: Math.max(0, inSet - start) };
+      }
+      var pause = (k === t.swingsPerSet - 1) ? t.longPauseMs : t.shortPauseMs;
+      if (inSet < start + t.swingMs + pause) {
+        return { swing: k, inSwing: false, rest: inSet - (start + t.swingMs), pause: pause };
+      }
+    }
+    return { swing: t.swingsPerSet - 1, inSwing: false, rest: 0, pause: t.longPauseMs };
   }
 
   function phaseColor(phase) {
@@ -868,14 +898,12 @@
     }
   }
 
-  function cueIndexAt(inCycle, t) {
+  function cueIndexLocal(local, t) {
     var cues = t.mode.cues;
     var idx = -1;
     for (var i = 0; i < cues.length; i++) {
-      if (inCycle >= cues[i].unit * t.d) idx = i;
+      if (local >= cues[i].unit * t.d) idx = i;
     }
-    // impact dot flashes only briefly into the pause
-    if (idx === cues.length - 1 && inCycle > t.swingMs + 300) idx = -1;
     return idx;
   }
 
@@ -894,19 +922,22 @@
     if (!running || !loopMeta) return;
 
     var t = loopMeta.timing;
-    var inCycle = (loopEl.currentTime * 1000) % t.fullCycleMs;
-    var st = swingState(inCycle, t);
-    renderSwing(st.pos, st.phase);
-    setBadge(st.phase);
-    highlightCue(cueIndexAt(inCycle, t));
+    var inSet = (loopEl.currentTime * 1000) % t.setCycleMs;
+    var ss = setState(inSet, t);
+    var m = ss.inSwing ? swingMotion(ss.local, t) : restMotion(ss.rest, ss.pause, t);
+    renderSwing(m.pos, m.phase);
+    setBadge(m.phase);
+    highlightCue(ss.inSwing ? cueIndexLocal(ss.local, t) : -1);
 
-    if (inCycle < t.swingMs) {
+    if (ss.inSwing) {
+      if (!wasInSwing) {
+        swingCount++;
+        counterEl.style.display = "block";
+        counterEl.textContent = swingCount + " swing" + (swingCount !== 1 ? "s" : "") + " completed";
+      }
       wasInSwing = true;
-    } else if (wasInSwing) {
+    } else {
       wasInSwing = false;
-      swingCount++;
-      counterEl.style.display = "block";
-      counterEl.textContent = swingCount + " swing" + (swingCount !== 1 ? "s" : "") + " completed";
     }
 
     animFrame = requestAnimationFrame(tick);
