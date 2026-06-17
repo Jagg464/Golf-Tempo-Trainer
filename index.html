@@ -227,16 +227,17 @@
         <text x="34" y="80" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="start">&#9666; through</text>
         <circle id="lineBall" cx="140" cy="96" r="11" fill="#e8e4d9"/>
       </g>
-      <!-- Pendulum visual: same back / impact / through motion on a metronome arc -->
+      <!-- Pendulum visual: upright metronome arm pivoting at the bottom (golfer's
+           view) — the head swings up-right for the backswing, up-left through -->
       <g id="pendVis" visibility="hidden">
-        <path d="M 57 73 A 92 92 0 0 1 223 73" fill="none" stroke="#2a4a2a" stroke-width="2" stroke-dasharray="3 4"/>
-        <circle cx="140" cy="34" r="4" fill="#7a9a5a"/>
-        <line x1="140" y1="120" x2="140" y2="140" stroke="#d4a843" stroke-width="2" stroke-dasharray="3 3" opacity="0.7"/>
-        <text x="140" y="156" fill="#d4a843" font-size="10" font-family="Georgia" text-anchor="middle">impact</text>
-        <text x="228" y="62" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="end">back</text>
-        <text x="52" y="62" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="start">through</text>
-        <line id="pendRod" x1="140" y1="34" x2="140" y2="126" stroke="#4a6a3a" stroke-width="3" stroke-linecap="round"/>
-        <circle id="pendBob" cx="140" cy="126" r="12" fill="#e8e4d9"/>
+        <path d="M 33 106 A 116 116 0 0 1 247 106" fill="none" stroke="#2a4a2a" stroke-width="2" stroke-dasharray="3 4"/>
+        <line x1="140" y1="28" x2="140" y2="56" stroke="#d4a843" stroke-width="2" stroke-dasharray="3 3" opacity="0.7"/>
+        <text x="140" y="20" fill="#d4a843" font-size="10" font-family="Georgia" text-anchor="middle">impact</text>
+        <text x="248" y="106" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="end">back &#9656;</text>
+        <text x="32" y="106" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="start">&#9666; through</text>
+        <line id="pendRod" x1="140" y1="150" x2="140" y2="34" stroke="#4a6a3a" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="140" cy="150" r="4" fill="#7a9a5a"/>
+        <circle id="pendBob" cx="140" cy="34" r="12" fill="#e8e4d9"/>
       </g>
     </svg>
     <div class="phase-badge" id="phaseBadge" style="background:rgba(255,255,255,0.05);color:#7a9a5a;">ready</div>
@@ -769,7 +770,7 @@
   // Swing motion. A single normalized position drives whichever visual is
   // active: pos = +1 at the top of the backswing (right), 0 at impact (center),
   // -1 at the end of the follow-through (left).
-  var PEND_PIVOT_X = 140, PEND_PIVOT_Y = 34, PEND_LEN = 92, PEND_MAX = 1.0822; // 62deg
+  var PEND_PIVOT_X = 140, PEND_PIVOT_Y = 150, PEND_LEN = 116, PEND_MAX = 1.0822; // 62deg, pivot at bottom
   var LINE_CENTER_X = 140, LINE_REACH = 104, LINE_Y = 96;
 
   function easeInOutSine(x) { return 0.5 - 0.5 * Math.cos(Math.PI * x); }
@@ -806,7 +807,7 @@
     if (visual === "pendulum") {
       var th = pos * PEND_MAX;
       var bx = PEND_PIVOT_X + PEND_LEN * Math.sin(th);
-      var by = PEND_PIVOT_Y + PEND_LEN * Math.cos(th);
+      var by = PEND_PIVOT_Y - PEND_LEN * Math.cos(th);
       pendRod.setAttribute("x2", bx);
       pendRod.setAttribute("y2", by);
       pendBob.setAttribute("cx", bx);
