@@ -216,16 +216,28 @@
 
   <div class="arc-container">
     <svg viewBox="0 0 280 180" width="280" height="180">
-      <path d="M 40 170 A 130 130 0 0 1 240 170" fill="none" stroke="#2a4a2a" stroke-width="3" stroke-dasharray="4 4"/>
-      <circle cx="200" cy="148" r="3" fill="#7a9a5a" opacity="0.5"/>
-      <text x="208" y="162" fill="#7a9a5a" font-size="9" font-family="Georgia">address</text>
-      <circle cx="55" cy="100" r="3" fill="#7a9a5a" opacity="0.5"/>
-      <text x="18" y="95" fill="#7a9a5a" font-size="9" font-family="Georgia">top</text>
-      <line x1="222" y1="164" x2="244" y2="170" stroke="#d4a843" stroke-width="2" opacity="0.5"/>
-      <text x="230" y="184" fill="#d4a843" font-size="9" font-family="Georgia">impact</text>
-      <line id="shaft" x1="140" y1="178" x2="140" y2="48" stroke="#c8dca0" stroke-width="3" stroke-linecap="round" visibility="hidden"/>
-      <circle id="clubhead" cx="140" cy="48" r="5" fill="#c8dca0" visibility="hidden"/>
-      <circle cx="140" cy="178" r="3" fill="#e8e4d9"/>
+      <!-- Line visual: ball travels right on the backswing, whips back through
+           the center at impact, and follows through to the left -->
+      <g id="lineVis">
+        <line x1="32" y1="96" x2="248" y2="96" stroke="#2a4a2a" stroke-width="4" stroke-linecap="round"/>
+        <line x1="140" y1="72" x2="140" y2="120" stroke="#d4a843" stroke-width="2" stroke-dasharray="3 3" opacity="0.7"/>
+        <circle cx="140" cy="96" r="4" fill="#3a5a2a"/>
+        <text x="140" y="138" fill="#d4a843" font-size="10" font-family="Georgia" text-anchor="middle">impact</text>
+        <text x="246" y="80" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="end">back &#9656;</text>
+        <text x="34" y="80" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="start">&#9666; through</text>
+        <circle id="lineBall" cx="140" cy="96" r="11" fill="#e8e4d9"/>
+      </g>
+      <!-- Pendulum visual: same back / impact / through motion on a metronome arc -->
+      <g id="pendVis" visibility="hidden">
+        <path d="M 57 73 A 92 92 0 0 1 223 73" fill="none" stroke="#2a4a2a" stroke-width="2" stroke-dasharray="3 4"/>
+        <circle cx="140" cy="34" r="4" fill="#7a9a5a"/>
+        <line x1="140" y1="120" x2="140" y2="140" stroke="#d4a843" stroke-width="2" stroke-dasharray="3 3" opacity="0.7"/>
+        <text x="140" y="156" fill="#d4a843" font-size="10" font-family="Georgia" text-anchor="middle">impact</text>
+        <text x="228" y="62" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="end">back</text>
+        <text x="52" y="62" fill="#7a9a5a" font-size="10" font-family="Georgia" text-anchor="start">through</text>
+        <line id="pendRod" x1="140" y1="34" x2="140" y2="126" stroke="#4a6a3a" stroke-width="3" stroke-linecap="round"/>
+        <circle id="pendBob" cx="140" cy="126" r="12" fill="#e8e4d9"/>
+      </g>
     </svg>
     <div class="phase-badge" id="phaseBadge" style="background:rgba(255,255,255,0.05);color:#7a9a5a;">ready</div>
   </div>
@@ -261,6 +273,11 @@
   <div class="control-group">
     <div class="control-label">Sound</div>
     <div class="btn-row" id="soundRow"></div>
+  </div>
+
+  <div class="control-group">
+    <div class="control-label">Motion</div>
+    <div class="btn-row" id="visualRow"></div>
   </div>
 
   <label class="awake-row"><input type="checkbox" id="awakeChk" checked> Keep screen on while running</label>
@@ -322,6 +339,7 @@
   var modeIdx = 0;
   var framesByMode = { long: 24, short: 18 };
   var sound = "beeps";
+  var visual = "line";
   var keepAwake = true;
   var running = false;
   var animFrame = null;
@@ -331,8 +349,11 @@
   var wakeLock = null;
 
   var beatsContainer = document.getElementById("beats");
-  var shaft = document.getElementById("shaft");
-  var clubhead = document.getElementById("clubhead");
+  var lineVis = document.getElementById("lineVis");
+  var pendVis = document.getElementById("pendVis");
+  var lineBall = document.getElementById("lineBall");
+  var pendRod = document.getElementById("pendRod");
+  var pendBob = document.getElementById("pendBob");
   var phaseBadge = document.getElementById("phaseBadge");
   var backMsEl = document.getElementById("backMs");
   var downMsEl = document.getElementById("downMs");
@@ -344,6 +365,7 @@
   var presetRow = document.getElementById("presetRow");
   var modeRow = document.getElementById("modeRow");
   var soundRow = document.getElementById("soundRow");
+  var visualRow = document.getElementById("visualRow");
   var awakeChk = document.getElementById("awakeChk");
   var loopEl = document.getElementById("loopPlayer");
 
@@ -380,6 +402,7 @@
         longFrames: framesByMode.long,
         shortFrames: framesByMode.short,
         sound: sound,
+        visual: visual,
         keepAwake: keepAwake
       }));
     } catch (e) {}
@@ -396,6 +419,7 @@
         framesByMode.short = Math.min(MODES[1].framesMax, Math.max(MODES[1].framesMin, Math.round(s.shortFrames)));
       }
       if (s.sound === "beeps" || s.sound === "voice") sound = s.sound;
+      if (s.visual === "line" || s.visual === "pendulum") visual = s.visual;
       if (typeof s.keepAwake === "boolean") keepAwake = s.keepAwake;
     } catch (e) {}
   }
@@ -638,6 +662,18 @@
     soundRow.appendChild(btn);
   });
 
+  [{ id: "line", label: "Line" }, { id: "pendulum", label: "Pendulum" }].forEach(function(v) {
+    var btn = document.createElement("button");
+    btn.className = "btn-option";
+    btn.textContent = v.label;
+    btn.setAttribute("data-visual", v.id);
+    btn.addEventListener("click", function() {
+      if (running) return;
+      setVisual(v.id);
+    });
+    visualRow.appendChild(btn);
+  });
+
   function buildPresetRow() {
     presetRow.innerHTML = "";
     var m = MODES[modeIdx];
@@ -730,43 +766,92 @@
     }
   });
 
-  // Swing arc
-  var PX = 140, PY = 178, SL = 128;
+  // Swing motion. A single normalized position drives whichever visual is
+  // active: pos = +1 at the top of the backswing (right), 0 at impact (center),
+  // -1 at the end of the follow-through (left).
+  var PEND_PIVOT_X = 140, PEND_PIVOT_Y = 34, PEND_LEN = 92, PEND_MAX = 1.0822; // 62deg
+  var LINE_CENTER_X = 140, LINE_REACH = 104, LINE_Y = 96;
 
-  function setClubAngle(deg) {
-    var rad = (deg - 40) * Math.PI / 180;
-    var tx = PX - SL * Math.sin(rad);
-    var ty = PY - SL * Math.cos(rad);
-    shaft.setAttribute("x2", tx);
-    shaft.setAttribute("y2", ty);
-    clubhead.setAttribute("cx", tx);
-    clubhead.setAttribute("cy", ty);
+  function easeInOutSine(x) { return 0.5 - 0.5 * Math.cos(Math.PI * x); }
+
+  // Map cycle time to position + phase. The downswing accelerates into impact
+  // and the ball whips through the center, mirroring a real swing's 3:1 feel.
+  function swingState(inCycle, t) {
+    var followMs = Math.min(t.downMs * 2.2, (t.fullCycleMs - t.swingMs) * 0.5);
+    var resetMs = t.fullCycleMs - t.swingMs - followMs;
+    var u;
+    if (inCycle < t.backMs) {
+      u = inCycle / t.backMs;
+      return { pos: easeInOutSine(u), phase: "back" };          // center -> right
+    } else if (inCycle < t.swingMs) {
+      u = (inCycle - t.backMs) / t.downMs;
+      return { pos: 1 - u * u, phase: "down" };                 // right -> center (impact)
+    } else if (inCycle < t.swingMs + followMs) {
+      u = (inCycle - t.swingMs) / followMs;
+      return { pos: -(1 - (1 - u) * (1 - u)), phase: "through" }; // center -> left
+    }
+    u = (inCycle - t.swingMs - followMs) / resetMs;
+    return { pos: -1 + easeInOutSine(u), phase: "reset" };       // left -> center
   }
 
-  function showClub(show) {
-    var v = show ? "visible" : "hidden";
-    shaft.setAttribute("visibility", v);
-    clubhead.setAttribute("visibility", v);
+  function phaseColor(phase) {
+    if (phase === "down") return "#ffd24a";
+    if (phase === "back") return "#c8dca0";
+    if (phase === "through") return "#9ec4e8";
+    return "#e8e4d9";
   }
 
-  function setPhaseColors(phase) {
+  function renderSwing(pos, phase) {
+    var color = phaseColor(phase);
+    if (visual === "pendulum") {
+      var th = pos * PEND_MAX;
+      var bx = PEND_PIVOT_X + PEND_LEN * Math.sin(th);
+      var by = PEND_PIVOT_Y + PEND_LEN * Math.cos(th);
+      pendRod.setAttribute("x2", bx);
+      pendRod.setAttribute("y2", by);
+      pendBob.setAttribute("cx", bx);
+      pendBob.setAttribute("cy", by);
+      pendBob.setAttribute("fill", color);
+    } else {
+      lineBall.setAttribute("cx", LINE_CENTER_X + pos * LINE_REACH);
+      lineBall.setAttribute("cy", LINE_Y);
+      lineBall.setAttribute("fill", color);
+    }
+  }
+
+  function setBadge(phase) {
     if (phase === "back") {
-      shaft.setAttribute("stroke", "#c8dca0");
-      clubhead.setAttribute("fill", "#c8dca0");
       phaseBadge.style.background = "rgba(74,122,58,0.4)";
       phaseBadge.style.color = "#c8dca0";
       phaseBadge.textContent = "back";
     } else if (phase === "down") {
-      shaft.setAttribute("stroke", "#d4a843");
-      clubhead.setAttribute("fill", "#d4a843");
       phaseBadge.style.background = "rgba(212,168,67,0.4)";
-      phaseBadge.style.color = "#d4a843";
+      phaseBadge.style.color = "#ffd24a";
       phaseBadge.textContent = "down";
+    } else if (phase === "through") {
+      phaseBadge.style.background = "rgba(120,170,220,0.3)";
+      phaseBadge.style.color = "#9ec4e8";
+      phaseBadge.textContent = "through";
     } else {
       phaseBadge.style.background = "rgba(255,255,255,0.05)";
       phaseBadge.style.color = "#7a9a5a";
-      phaseBadge.textContent = phase === "pause" ? "reset" : "ready";
+      phaseBadge.textContent = phase === "reset" ? "reset" : "ready";
     }
+  }
+
+  function setVisual(id) {
+    visual = id;
+    lineVis.setAttribute("visibility", id === "line" ? "visible" : "hidden");
+    pendVis.setAttribute("visibility", id === "pendulum" ? "visible" : "hidden");
+    var btns = visualRow.querySelectorAll(".btn-option");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle("selected", btns[i].getAttribute("data-visual") === id);
+    }
+    if (!running) {
+      renderSwing(0, "ready");
+      setBadge("ready");
+    }
+    saveSettings();
   }
 
   function clearBeats() {
@@ -802,31 +887,19 @@
     if (!running || !loopMeta) return;
 
     var t = loopMeta.timing;
-    var elapsed = loopEl.currentTime * 1000;
-    var inCycle = elapsed % t.fullCycleMs;
+    var inCycle = (loopEl.currentTime * 1000) % t.fullCycleMs;
+    var st = swingState(inCycle, t);
+    renderSwing(st.pos, st.phase);
+    setBadge(st.phase);
+    highlightCue(cueIndexAt(inCycle, t));
 
     if (inCycle < t.swingMs) {
       wasInSwing = true;
-      showClub(true);
-      highlightCue(cueIndexAt(inCycle, t));
-      if (inCycle < t.backMs) {
-        setClubAngle((inCycle / t.backMs) * 160);
-        setPhaseColors("back");
-      } else {
-        var t2 = (inCycle - t.backMs) / t.downMs;
-        setClubAngle(160 - t2 * 200);
-        setPhaseColors("down");
-      }
-    } else {
-      if (wasInSwing) {
-        wasInSwing = false;
-        swingCount++;
-        counterEl.style.display = "block";
-        counterEl.textContent = swingCount + " swing" + (swingCount !== 1 ? "s" : "") + " completed";
-      }
-      showClub(false);
-      highlightCue(cueIndexAt(inCycle, t));
-      setPhaseColors("pause");
+    } else if (wasInSwing) {
+      wasInSwing = false;
+      swingCount++;
+      counterEl.style.display = "block";
+      counterEl.textContent = swingCount + " swing" + (swingCount !== 1 ? "s" : "") + " completed";
     }
 
     animFrame = requestAnimationFrame(tick);
@@ -834,7 +907,7 @@
 
   function setControlsDisabled(disabled) {
     framesSlider.className = disabled ? "disabled" : "";
-    var all = document.querySelectorAll("#presetRow .btn-option, #modeRow .btn-option, #soundRow .btn-option");
+    var all = document.querySelectorAll("#presetRow .btn-option, #modeRow .btn-option, #soundRow .btn-option, #visualRow .btn-option");
     for (var i = 0; i < all.length; i++) {
       disabled ? all[i].classList.add("disabled") : all[i].classList.remove("disabled");
     }
@@ -884,9 +957,9 @@
     releaseWakeLock();
     mainBtn.textContent = "Start";
     mainBtn.className = "start-btn go";
-    showClub(false);
     clearBeats();
-    setPhaseColors("idle");
+    renderSwing(0, "ready");
+    setBadge("ready");
     setControlsDisabled(false);
   }
 
@@ -908,7 +981,9 @@
   loadSettings();
   awakeChk.checked = keepAwake;
   setSound(sound);
+  setVisual(visual);
   setMode(modeIdx);
+  renderSwing(0, "ready");
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register("./sw.js").catch(function() {});
