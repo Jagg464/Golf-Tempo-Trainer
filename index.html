@@ -290,7 +290,8 @@
 
   <div class="footer">
     Sets of 3 swings (practice, practice, hit) with 3s gaps, then a 15s break
-    to grab a ball. Tour pros swing 3:1 back-to-down — 24/8 frames @30fps.
+    to grab a ball — a chord at 10s and a rising go-signal at 12s.
+    Tour pros swing 3:1 back-to-down — 24/8 frames @30fps.
     Sound keeps playing when the screen locks.
   </div>
 </div>
@@ -305,6 +306,8 @@
   var SWINGS_PER_SET = 3;
   var SHORT_PAUSE_MS = 3000;
   var LONG_PAUSE_MS = 15000;
+  var LONG_PAUSE_HEADS_UP_MS = 10000; // 10s into the break: soft attention chord
+  var LONG_PAUSE_GO_MS = 12000;       // 12s into the break: ascending go-signal
 
   var MODES = [
     {
@@ -504,6 +507,19 @@
     tone(ctx, when, 180, 0.12, 0.6);
   }
 
+  function prepHeadsUp(ctx, when) {
+    // Soft two-note chord — "pay attention", nothing like the swing cues
+    tone(ctx, when, 330, 0.28, 0.20, "sine");
+    tone(ctx, when, 440, 0.28, 0.18, "sine");
+  }
+
+  function prepGo(ctx, when) {
+    // Three ascending pulses — "start your routine"
+    tone(ctx, when,        550, 0.07, 0.42, "sine");
+    tone(ctx, when + 0.15, 660, 0.07, 0.47, "sine");
+    tone(ctx, when + 0.30, 880, 0.09, 0.56, "sine");
+  }
+
   var SOUND_STYLES = {
     beeps: {
       takeaway: function(ctx, when) { tone(ctx, when, 1100, 0.08, 0.5); },
@@ -538,6 +554,9 @@
     var Ctor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     var ctx = new Ctor(1, setSamples * sets, sr);
     var style = SOUND_STYLES[sound];
+    // Offset (in ms) from set start to where the long break begins
+    var longBreakOffsetMs = timing.swingsPerSet * timing.swingMs +
+                            (timing.swingsPerSet - 1) * timing.shortPauseMs;
     for (var s = 0; s < sets; s++) {
       var setBase = (s * setSamples) / sr;
       for (var k = 0; k < timing.swingsPerSet; k++) {
@@ -546,6 +565,9 @@
           style[cue.label](ctx, swingStart + (cue.unit * timing.d) / 1000);
         });
       }
+      var longBreakStart = setBase + longBreakOffsetMs / 1000;
+      prepHeadsUp(ctx, longBreakStart + LONG_PAUSE_HEADS_UP_MS / 1000);
+      prepGo(ctx,      longBreakStart + LONG_PAUSE_GO_MS       / 1000);
     }
     return new Promise(function(resolve, reject) {
       ctx.oncomplete = function(e) { resolve(e.renderedBuffer); };
